@@ -1,0 +1,114 @@
+name: Eval Gate, Build, Push
+
+# Eval gate runs on every push and PR (visibility). Build/push only
+# ever run on push to main, and only if the eval gate passed --
+# `needs: eval-gate` skips build-and-push automatically on gate failure.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # to commit the ratcheted champion.json back to main
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # bge-large-en-v1.5 (~1.3GB) and bge-reranker-large (~1.3GB) are
+      # public models pulled fresh from HF; cache the download across
+      # runs so only the first run (or a model bump) pays for it.
+      - name: Cache Hugging Face model downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-cache-${{ hashFiles('embed_chunks.py', 'rerank.py') }}
+
+      - name: Install retrieval dependencies
+        run: pip install -r requirements-retrieval.txt
+
+      # Rebuild the Qdrant index fresh from chunks.jsonl every run,
+      # rather than restoring a committed/cached index binary. Tradeoff
+      # made deliberately: rebuilding costs a few CPU-minutes per run
+      # (embedding 220 pieces on a CPU runner), but guarantees the index
+      # can never silently drift from chunks.jsonl -- a committed binary
+      # index would need its own out-of-band "did the corpus change but
+      # the index wasn't regenerated" check, which is more moving parts
+      # than this eval set's size justifies. BM25's index is already
+      # rebuilt in memory on every process start regardless (bm25_index.py
+      # has no persistence step at all), so there was no parallel
+      # decision to make there.
+      - name: Build Qdrant index from chunks.jsonl
+        run: python embed_chunks.py
+
+      # Retrieval-only gate. Does NOT call the LLM server or score
+      # generation quality -- a GPU-backed Mistral-7B server isn't
+      # available on a standard GitHub-hosted runner, and standing one
+      # up (a GPU runner, model weights, HF auth) is a distinct problem
+      # from this eval gate. Scope is retrieval quality only: Recall@5
+      # and MRR of RetrievalPipeline.retrieve() -- the SAME production
+      # code path retrieve_and_generate.py calls -- against eval_set.jsonl.
+      - name: Run retrieval eval
+        run: python ci/ci_eval.py
+
+      - name: Compare against champion baseline
+        run: python ci/gate.py
+
+      - name: Commit ratcheted champion baseline
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ci/champion.json
+          git diff --staged --quiet || git commit -m "ci: ratchet eval champion baseline [skip ci]"
+          git diff --staged --quiet || git push
+
+      - name: Upload eval result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-result
+          path: ci/eval_result.json
+
+  build-and-push:
+    needs: eval-gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR + GITHUB_TOKEN, not literal OIDC federation. True OIDC
+      # (e.g. Azure ACR via azure/login with a federated credential)
+      # needs a real cloud tenant + app registration configured on the
+      # target side, which this project doesn't have. GITHUB_TOKEN is
+      # still not a long-lived stored secret -- GitHub auto-issues it
+      # per workflow run, scoped to this repo, and it expires when the
+      # job ends -- so it satisfies the underlying goal (no secret to
+      # leak or rotate), even though the login itself is a bearer-token
+      # login to the registry, not an OIDC token exchange.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push serving image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./serving
+          push: true
+          tags: ghcr.io/${{ github.repository }}/rag-serving:${{ github.sha }}

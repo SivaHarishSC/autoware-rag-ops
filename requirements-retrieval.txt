@@ -1,0 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0
+numpy
+sentence-transformers==6.0.1
+qdrant-client==1.19.0
+rank-bm25==0.2.2
+transformers==5.16.1
+requests==2.34.2
+huggingface_hub==1.29.0

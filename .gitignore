@@ -1,0 +1,20 @@
+.venv/
+.venv-serving/
+__pycache__/
+qdrant_data/
+*.pyc
+
+# Raw/intermediate corpus data, not source of truth (chunks.jsonl is) --
+# reproducible from dataset_making/ scripts, see README
+autoware-documentation/
+autoware-rag-corpus/
+autoware-rag-corpus-clean/
+
+# CI's per-run output (uploaded as a build artifact instead) -- only
+# champion.json is the persistent, tracked baseline
+ci/eval_result.json
+
+# One-off eval-run logs, superseded by RETRIEVAL_NOTES.md's narrative
+eval_results.json
+eval_generation_results.json
+eval_generation_results_capped.json
