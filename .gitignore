@@ -3,6 +3,7 @@
 __pycache__/
 qdrant_data/
 *.pyc
+.claude/
 
 # Raw/intermediate corpus data, not source of truth (chunks.jsonl is) --
 # reproducible from dataset_making/ scripts, see README
