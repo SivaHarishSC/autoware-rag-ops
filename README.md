@@ -119,10 +119,23 @@ confirmed `ci/gate.py` genuinely blocks — hand-edited a copy of the result to
 simulate a regression and watched the gate exit 1 with both failure reasons
 printed, which is what `needs: eval-gate` uses to stop `build-and-push`.
 
-**Not yet done:** no GitHub repo/remote exists yet, so no real Actions run
-has executed and no image has actually been pushed — everything above was
-verified by running the workflow's own scripts locally, not by watching
-GitHub Actions execute the YAML.
+**Real Actions runs, not just local verification:** pushed to
+[github.com/SivaHarishSC/autoware-rag-ops](https://github.com/SivaHarishSC/autoware-rag-ops)
+and watched GitHub Actions actually execute the YAML. The first real run hit
+a genuine bug: `docker/build-push-action` rejected the image tag with
+`invalid tag ... repository name must be lowercase`, because
+`github.repository` (`SivaHarishSC/autoware-rag-ops`) has uppercase letters
+and GHCR/OCI image names must be all-lowercase. Fixed by adding a step that
+lowercases the repo name once (`${GITHUB_REPOSITORY,,}`) and referencing that
+computed output in the tag, instead of the raw context. The retriggered run
+went green end to end — `eval-gate` passed (same 0.7778/0.5593 numbers) and
+`build-and-push` produced a real image:
+
+```
+ghcr.io/sivaharishsc/autoware-rag-ops/rag-serving:25c9c80630f7ac45b09035c8907c45de53f832da
+```
+
+confirmed via GHCR's own package page, not assumed from a green checkmark.
 
 ## Repo layout
 
