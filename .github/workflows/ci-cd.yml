@@ -90,6 +90,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # GHCR/OCI image names must be all-lowercase. github.repository is
+      # "SivaHarishSC/autoware-rag-ops" -- the owner has uppercase letters,
+      # so baking it straight into the tag fails with "invalid tag ...
+      # repository name must be lowercase". Lowercase it once here and
+      # reference the computed output everywhere else, rather than relying
+      # on every tag reference downstream to remember to lowercase itself.
+      - name: Compute lowercase image repository
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       # GHCR + GITHUB_TOKEN, not literal OIDC federation. True OIDC
       # (e.g. Azure ACR via azure/login with a federated credential)
       # needs a real cloud tenant + app registration configured on the
@@ -111,4 +121,4 @@ jobs:
         with:
           context: ./serving
           push: true
-          tags: ghcr.io/${{ github.repository }}/rag-serving:${{ github.sha }}
+          tags: ghcr.io/${{ steps.repo.outputs.name }}/rag-serving:${{ github.sha }}
