@@ -1,0 +1,102 @@
+# Canary Deployment for the retrieval service. Same image, same code as
+# the stable Deployment (deployment.yaml) -- the only difference is
+# BOOST_WEIGHT=0.05 vs the production default 0.5 (see doctype.py). This
+# weakens the doc_type rerank-stage boost enough to measurably regress
+# Recall@5 on adversarial (design-vs-interface) queries specifically,
+# giving the canary-vs-stable eval comparison something real to detect.
+#
+# Traffic split: chosen as replica-count ratio under the SAME Service
+# (retrieval-service's selector matches only `app: retrieval-service`,
+# not `track`), not Argo Rollouts. Argo Rollouts gives weighted/staged
+# traffic shifting and automated analysis-based promotion, but it's a
+# separate controller + CRDs to install and operate -- real extra setup
+# or cost, not currently installed. A plain Service load-balancing
+# across two Deployments' pods via shared labels is a well-known,
+# zero-extra-infrastructure substitute: replica-count ratio approximates
+# a traffic percentage (1 stable : 1 canary here = ~50/50, since each
+# pod gets a roughly equal share of Service-routed requests). Good
+# enough for this local demo's goal -- proving the DETECTION logic
+# against live pods -- without installing a new controller un-asked.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-service-canary
+  labels:
+    app: retrieval-service
+    track: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: retrieval-service
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: retrieval-service
+        track: canary
+    spec:
+      containers:
+        - name: retrieval-service
+          image: retrieval-service:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8001
+          env:
+            - name: OMP_NUM_THREADS
+              value: "4"
+            - name: BOOST_WEIGHT
+              value: "0.05"
+          resources:
+            requests:
+              cpu: "1"
+              memory: "3Gi"
+            limits:
+              memory: "5Gi"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 10
+            failureThreshold: 100
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 15
+            failureThreshold: 3
+---
+# A dedicated Service per track, ADDITIONAL to the shared retrieval-service
+# Service (which load-balances both tracks together for the replica-ratio
+# traffic split). These two exist purely so the live eval comparison below
+# can address each version in isolation -- the shared Service can't do
+# that by design.
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval-service-stable-only
+spec:
+  selector:
+    app: retrieval-service
+    track: stable
+  ports:
+    - port: 8001
+      targetPort: 8001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval-service-canary-only
+spec:
+  selector:
+    app: retrieval-service
+    track: canary
+  ports:
+    - port: 8001
+      targetPort: 8001

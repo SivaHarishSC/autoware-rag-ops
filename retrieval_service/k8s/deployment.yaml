@@ -1,0 +1,139 @@
+# Phase 6, step 3: probes + resource sizing on the stable retrieval-service
+# Deployment. The Service selector intentionally matches only `app:
+# retrieval-service` (not `track`), so the canary Deployment (added
+# separately in canary.yaml) shares this same Service and gets a share
+# of traffic purely via replica-count ratio -- see canary.yaml for why.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-service
+  labels:
+    app: retrieval-service
+    track: stable
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: retrieval-service
+      track: stable
+  template:
+    metadata:
+      labels:
+        app: retrieval-service
+        track: stable
+    spec:
+      containers:
+        - name: retrieval-service
+          image: retrieval-service:local
+          imagePullPolicy: Never  # image was kind-loaded directly, not pulled from a registry
+          ports:
+            - containerPort: 8001
+          env:
+            # Real bug found while testing HPA scale-up: with no thread
+            # cap, torch auto-detects the HOST's full core count (20)
+            # and spawns that many threads PER POD, regardless of the
+            # pod's CPU *request*. Two concurrently cold-starting pods
+            # (40 threads competing for 20 real cores) didn't just run
+            # ~2x slower -- neither one printed a single embedding-batch
+            # completion for 8+ minutes, a genuine thrashing stall, not
+            # proportional slowdown. This directly broke HPA's own
+            # purpose: scaling up made things worse, not better.
+            # Capping each pod to 4 threads fixed it -- 1/2/4 concurrent
+            # pods measured at 259s/394s/765s respectively (real numbers,
+            # not extrapolated), which scales sub-linearly with real
+            # work, not the near-infinite stall seen unthrottled.
+            - name: OMP_NUM_THREADS
+              value: "4"
+          resources:
+            # Measured with `crictl stats` on the real running pod, not
+            # guessed: idle ~0.15% CPU / 2.29GB mem (models + index
+            # resident); a SINGLE /retrieve request AND the startup
+            # embedding step both burst to ~19-20 cores, because torch's
+            # intra-op parallelism saturates every visible core for one
+            # forward pass -- this is real, sustained behavior, not a
+            # one-off spike.
+            #
+            # Self-correction made while testing this manifest: an
+            # earlier version of this file set limits.cpu: "4", sized
+            # off that same 19-core observation but reasoning about it
+            # backwards (treating it as "headroom to allow", not "actual
+            # need"). Redeploying with that limit made the startup
+            # embedding step visibly worse -- `crictl stats` showed the
+            # container pinned at exactly 397% (the 4-core cap) with no
+            # batch-progress logged for 4+ minutes, versus ~40s to the
+            # first batch unthrottled. A CPU limit on a genuinely
+            # bursty, CPU-bound workload just throttles it. Fix: no CPU
+            # limit -- request alone drives HPA's utilization % and the
+            # scheduler's fair-share weighting under contention; CPU is
+            # compressible (unlike memory), so there's no OOM-style
+            # failure mode a limit is protecting against here.
+            requests:
+              cpu: "1"
+              memory: "3Gi"
+            limits:
+              memory: "5Gi"
+          # Deliberate deviation from a 300s (30 x 10s) startup budget:
+          # 300s only covers a SOLO cold start (measured 203-259s). With
+          # maxReplicas=4 below, a real scale-up can cold-start multiple
+          # pods on this node at once, and concurrent starts measurably
+          # slow each other down even after the thread-oversubscription
+          # fix above: 1/2/4 concurrent pods measured at 259s/394s/765s.
+          # A 300s budget would have the startupProbe itself kill pods
+          # during a legitimate (if slow) multi-replica cold start --
+          # exactly the restart-loop failure mode this probe exists to
+          # prevent. failureThreshold=100 (1000s) covers the real 4-way
+          # worst case with ~30% margin. periodSeconds stays 10 as
+          # specified; readinessProbe/livenessProbe are BOTH suppressed
+          # until startupProbe first succeeds -- standard kubelet
+          # behavior, not something this config opts into separately.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 10
+            failureThreshold: 100
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 15
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval-service
+spec:
+  selector:
+    app: retrieval-service
+  ports:
+    - port: 8001
+      targetPort: 8001
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: retrieval-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: retrieval-service
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # CPU-bound service per the embedding/reranking benchmark --
+          # CPU is the right autoscaling signal, not memory (memory is
+          # flat regardless of request load, per the measurements above).
+          averageUtilization: 70

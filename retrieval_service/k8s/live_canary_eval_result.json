@@ -1,0 +1,233 @@
+{
+  "stable": {
+    "n_queries": 18,
+    "recall_at_5": 0.7777777777777778,
+    "mrr": 0.5592592592592592,
+    "per_query": [
+      {
+        "query": "What is microautonomy architecture in Autoware?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What is the difference between Autoware Core and Autoware Universe in the repository model?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 0.3333333333333333
+      },
+      {
+        "query": "How does Autoware.AI differ from Autoware Core/Universe?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 0.5
+      },
+      {
+        "query": "What are the goals and non-goals of the Planning component?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What is the high-level architecture of the Perception component?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What is the purpose of the Map component in Autoware's architecture?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Why is the Mission Planning sub-component kept separate from the rest of Planning?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 0.5
+      },
+      {
+        "query": "What ROS launch parameter enables the surround-obstacle safety check before the vehicle starts moving?",
+        "type": "exact_term",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "Which reference implementation is responsible for free-space path planning when parking?",
+        "type": "exact_term",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "What tf transform does the Localization component publish, and between which two frames?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 0.3333333333333333
+      },
+      {
+        "query": "What message type is used for GNSS-INS orientation data in Autoware?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Which repository holds the message definitions for Autoware's component APIs (ADAPI)?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What map format does Autoware use to represent vector/lane-level maps?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Which planning node package would you modify to add a new velocity-based planning module?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Per Autoware's interface spec (not the component design doc), which upstream component supplies map data such as the vector map directly to Perception?",
+        "type": "adversarial",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "What data does the Vehicle Interface component send back to Autoware, as opposed to what it receives from Autoware?",
+        "type": "adversarial",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "Per the interface spec (not the architecture doc), what exact ROS message type does Localization output for vehicle pose?",
+        "type": "adversarial",
+        "recall_at_5": 1.0,
+        "rr": 0.2
+      },
+      {
+        "query": "What requirements must a package satisfy to be admitted into Autoware Core (not just what distinguishes Core from Autoware.AI)?",
+        "type": "adversarial",
+        "recall_at_5": 1.0,
+        "rr": 0.2
+      }
+    ]
+  },
+  "canary": {
+    "n_queries": 18,
+    "recall_at_5": 0.7222222222222222,
+    "mrr": 0.5481481481481482,
+    "per_query": [
+      {
+        "query": "What is microautonomy architecture in Autoware?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What is the difference between Autoware Core and Autoware Universe in the repository model?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 0.3333333333333333
+      },
+      {
+        "query": "How does Autoware.AI differ from Autoware Core/Universe?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 0.5
+      },
+      {
+        "query": "What are the goals and non-goals of the Planning component?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What is the high-level architecture of the Perception component?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What is the purpose of the Map component in Autoware's architecture?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Why is the Mission Planning sub-component kept separate from the rest of Planning?",
+        "type": "conceptual",
+        "recall_at_5": 1.0,
+        "rr": 0.5
+      },
+      {
+        "query": "What ROS launch parameter enables the surround-obstacle safety check before the vehicle starts moving?",
+        "type": "exact_term",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "Which reference implementation is responsible for free-space path planning when parking?",
+        "type": "exact_term",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "What tf transform does the Localization component publish, and between which two frames?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 0.3333333333333333
+      },
+      {
+        "query": "What message type is used for GNSS-INS orientation data in Autoware?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Which repository holds the message definitions for Autoware's component APIs (ADAPI)?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "What map format does Autoware use to represent vector/lane-level maps?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Which planning node package would you modify to add a new velocity-based planning module?",
+        "type": "exact_term",
+        "recall_at_5": 1.0,
+        "rr": 1.0
+      },
+      {
+        "query": "Per Autoware's interface spec (not the component design doc), which upstream component supplies map data such as the vector map directly to Perception?",
+        "type": "adversarial",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "What data does the Vehicle Interface component send back to Autoware, as opposed to what it receives from Autoware?",
+        "type": "adversarial",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "Per the interface spec (not the architecture doc), what exact ROS message type does Localization output for vehicle pose?",
+        "type": "adversarial",
+        "recall_at_5": 0.0,
+        "rr": 0.0
+      },
+      {
+        "query": "What requirements must a package satisfy to be admitted into Autoware Core (not just what distinguishes Core from Autoware.AI)?",
+        "type": "adversarial",
+        "recall_at_5": 1.0,
+        "rr": 0.2
+      }
+    ]
+  },
+  "rollback_triggered": true
+}
