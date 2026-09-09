@@ -3,6 +3,7 @@ doc_type classification (design vs interface vs other) + a fragile,
 explicit keyword heuristic for detecting when a QUERY is asking about
 one doc type specifically -- used as a rerank-stage boost, not a filter.
 """
+import os
 
 DESIGN_PATH = "design/autoware-architecture-v1/components/"
 INTERFACE_PATH = "design/autoware-architecture-v1/interfaces/"
@@ -43,16 +44,24 @@ def detect_doc_type_hint(query):
     return None
 
 
+# Overridable via BOOST_WEIGHT env var so the K8s canary Deployment can
+# run a deliberately-weakened variant of this exact code/image (no
+# rebuild) to give the live canary-vs-stable eval comparison something
+# real to detect -- production default (0.5) is unchanged unless the
+# env var is set.
+BOOST_WEIGHT = float(os.environ.get("BOOST_WEIGHT", "0.5"))
+
+
 def apply_doc_type_boost(chunk_ids, scores, doc_type_by_id, hint):
     """scores aligned with chunk_ids (raw cross-encoder scores). Adds
-    0.5x the score spread among THESE candidates to anything matching
-    the hinted doc_type -- big enough to flip close calls, not big
-    enough to guarantee an override of a much more relevant wrong-
-    doctype candidate (that's the point of a boost over a hard filter:
-    a wrong hint can't nuke the right answer if it's already winning
-    decisively on relevance)."""
+    BOOST_WEIGHT (default 0.5x) the score spread among THESE candidates
+    to anything matching the hinted doc_type -- big enough to flip close
+    calls, not big enough to guarantee an override of a much more
+    relevant wrong-doctype candidate (that's the point of a boost over a
+    hard filter: a wrong hint can't nuke the right answer if it's
+    already winning decisively on relevance)."""
     if hint is None:
         return list(scores)
     spread = max(scores) - min(scores)
-    boost = 0.5 * spread
+    boost = BOOST_WEIGHT * spread
     return [s + boost if doc_type_by_id.get(cid) == hint else s for cid, s in zip(chunk_ids, scores)]

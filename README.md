@@ -1,9 +1,11 @@
-# Autoware RAG — retrieval, serving, and CI/CD
+# Autoware RAG — retrieval, serving, CI/CD, and K8s canary
 
 A RAG pipeline over a subset of [Autoware](https://github.com/autowarefoundation/autoware-documentation)
 architecture docs: hybrid retrieval (dense + BM25, RRF-fused, cross-encoder
 reranked, doc-type boosted) feeding a locally-served NF4-quantized LLM, gated
-by a CI eval that blocks regressions before an image is built.
+by a CI eval that blocks regressions before an image is built, with the
+retrieval half also packaged as its own Kubernetes-deployed, canary-tested,
+autoscaled service.
 
 Full diagnostic narrative (including a self-caught analysis mistake, kept
 verbatim) is in [RETRIEVAL_NOTES.md](RETRIEVAL_NOTES.md). This file is the
@@ -137,6 +139,71 @@ ghcr.io/sivaharishsc/autoware-rag-ops/rag-serving:25c9c80630f7ac45b09035c8907c45
 
 confirmed via GHCR's own package page, not assumed from a green checkmark.
 
+## Kubernetes (`retrieval_service/`, Phase 6)
+
+The retrieval/reranking half of the pipeline (dense + BM25 + rerank + doctype
+boost — the exact same `RetrievalPipeline.retrieve()` production calls,
+confirmed unambiguously against the multiple intermediate configs that exist
+in this repo's history) is packaged as its own CPU-only service, separate
+from `serving/`'s GPU LLM container: `retrieval_service/app.py` (FastAPI,
+`/health` + `POST /retrieve`) and `retrieval_service/Dockerfile` (plain
+`python:3.12-slim`, no CUDA — confirmed via `docker history`, no
+nvidia/cuda layers). Model weights are baked into the image at build time
+(downloaded once during `docker build`, not per pod at runtime); the
+Qdrant/BM25 index is still rebuilt from `chunks.jsonl` at pod startup —
+those are two genuinely separate decisions (weights are fixed artifacts,
+the index must never silently drift from source).
+
+Verified on a local `kind` cluster (`retrieval_service/k8s/deployment.yaml`,
+`canary.yaml`):
+
+- **Probes** — `startupProbe`/`readinessProbe`/`livenessProbe` sized against
+  *measured* cold-start, not defaults or the originally-planned number.
+  Real induced failure test: froze the running process with `SIGSTOP`
+  (simulating a hung-not-crashed pod) and captured the kubelet actually
+  catch it — `Readiness probe failed → Liveness probe failed (x3) →
+  Killing: failed liveness probe, will be restarted`.
+- **Two real bugs found and fixed while sizing resources, not guessed
+  upfront**: (1) an initial `limits.cpu: "4"` throttled the pod's own
+  startup embedding step (pinned at exactly 397% CPU, no progress for 4+
+  minutes) — fixed by dropping the CPU limit entirely (CPU is compressible;
+  the request alone drives HPA math). (2) With no limit, torch then
+  auto-detected the *host's* full core count and spawned that many threads
+  *per pod*, so two concurrently cold-starting pods (40 threads over 20
+  real cores) didn't run proportionally slower, they stalled — neither
+  finished a single embedding batch after 8+ minutes. Fixed with
+  `OMP_NUM_THREADS=4`; verified 1/2/4 concurrent pods cold-start in
+  259s/394s/765s respectively (real numbers), which is why
+  `startupProbe.failureThreshold` is 100 (1000s), not the 30 (300s) a
+  solo-pod measurement alone would have justified.
+- **HPA** — CPU-based (`averageUtilization: 70`, min 1 / max 4), demonstrated
+  scaling 1→4 replicas under real generated load against `/retrieve`
+  (`cpu: 0%/70%` → `683%/70%` → `1741%/70%`, `REPLICAS` climbing to 4 within
+  36s), and back down to 1 once load stopped. Honest caveat: 2 of the 4
+  replicas stayed `Pending` on this specific machine — 4×3Gi memory request
+  exceeds the local Docker Desktop VM's 7.75Gi allocatable memory, a real
+  capacity constraint worth carrying into any future cloud sizing, not a
+  config bug.
+- **Canary** — same image, one config difference (`BOOST_WEIGHT` env var:
+  0.5 stable vs 0.05 canary, see `doctype.py`), traffic split via
+  replica-count ratio under a shared Service rather than installing Argo
+  Rollouts (extra controller/CRDs, out of scope for this exercise). A live
+  eval (`retrieval_service/k8s/live_canary_eval.py`) queries both versions'
+  *running pods through the cluster* — not offline — and reproduces the
+  exact production baseline for stable (Recall@5=0.7778, MRR=0.5593) while
+  showing the canary regressing specifically on adversarial queries
+  (0.500→0.250, the exact category `BOOST_WEIGHT` affects; conceptual/
+  exact_term unchanged), then fires a rollback-trigger decision
+  programmatically using the same zero-tolerance Recall@5 rule as
+  `ci/gate.py`.
+
+**Not done, by explicit choice, not oversight:** a brief AKS spin-up (2x
+`Standard_B4ms`, Free-tier control plane, ~$0.35-0.40/hr real Azure retail
+pricing, torn down immediately after capturing evidence) was priced out and
+offered as the closing step, but declined — no cloud resources were
+provisioned. The `kind`-verified manifests above are cloud-portable as-is
+if that step happens later.
+
 ## Repo layout
 
 | Path | What |
@@ -148,6 +215,7 @@ confirmed via GHCR's own package page, not assumed from a green checkmark.
 | `eval_set.jsonl` | 18 hand-labeled, ground-truth-verified eval queries |
 | `retrieve_and_generate.py` | production retrieval + generation pipeline |
 | `run_eval_generation.py` | full end-to-end eval (real retrieval + real generation) |
-| `serving/` | FastAPI serving layer + Dockerfile |
+| `serving/` | FastAPI serving layer + Dockerfile (GPU LLM container) |
+| `retrieval_service/` | CPU-only retrieval/reranking service + Dockerfile + K8s manifests (Phase 6) |
 | `ci/` | CI eval gate (`ci_eval.py`, `gate.py`) + champion baseline |
 | `RETRIEVAL_NOTES.md` | full diagnostic narrative behind the numbers above |

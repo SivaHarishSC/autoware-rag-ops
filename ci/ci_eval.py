@@ -30,7 +30,7 @@ def main():
     per_query = []
     for row in eval_rows:
         query, expected = row["query"], set(row["expected_chunk_ids"])
-        top_ids, _hint = pipeline.retrieve(query, k=TOP_K_FINAL)
+        top_ids, _hint, _scores = pipeline.retrieve(query, k=TOP_K_FINAL)
         per_query.append({
             "query": row["query"],
             "type": row["query_type"],

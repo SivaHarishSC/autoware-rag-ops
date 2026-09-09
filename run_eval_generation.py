@@ -25,7 +25,7 @@ def main():
         expected = set(row["expected_chunk_ids"])
 
         t0 = time.time()
-        top_ids, hint = pipeline.retrieve(query, k=5)
+        top_ids, hint, _scores = pipeline.retrieve(query, k=5)
         ranked_chunks = [pipeline.chunk_text_by_id[cid] for cid in top_ids]
         context_chunks, context_meta = assemble_capped_context(ranked_chunks, count_fn=pipeline.count_real_tokens)
         t1 = time.time()

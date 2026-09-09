@@ -154,12 +154,13 @@ class RetrievalPipeline:
         hint = detect_doc_type_hint(query)
         boosted_scores = apply_doc_type_boost(fused, base_scores, self.doc_type_by_id, hint)
         order = sorted(range(len(fused)), key=lambda i: -boosted_scores[i])
-        reranked = [fused[i] for i in order]
+        reranked = [fused[i] for i in order][:k]
+        scores_by_id = {fused[i]: boosted_scores[i] for i in order[:k]}
 
-        return reranked[:k], hint
+        return reranked, hint, scores_by_id
 
     def retrieve_and_generate(self, query, k=TOP_K_FINAL, max_tokens=256):
-        top_ids, hint = self.retrieve(query, k)
+        top_ids, hint, _scores = self.retrieve(query, k)
         ranked_chunks = [self.chunk_text_by_id[cid] for cid in top_ids]
         context_chunks, context_meta = assemble_capped_context(ranked_chunks, count_fn=self.count_real_tokens)
         messages = format_context_prompt(context_chunks, query)
